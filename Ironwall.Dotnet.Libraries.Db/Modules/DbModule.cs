@@ -17,7 +17,7 @@ namespace Ironwall.Dotnet.Libraries.Db.Modules;
 public class DbModule : Module
 {
     #region - Ctors -
-    public DbModule(ILogService? log, string ipDbServer, int portDbServer, string dbDatabase, string uidDatabase, string passwordDbServer)
+    public DbModule(ILogService? log, string ipDbServer, int portDbServer, string dbDatabase, string uidDatabase, string passwordDbServer, string excelFolder, bool isLoadExcel)
     {
         _log = log;
         _ipDbServer = ipDbServer;
@@ -25,6 +25,9 @@ public class DbModule : Module
         _dbDatabase = dbDatabase;
         _uidDbServer = uidDatabase;
         _passwordDbServer = passwordDbServer;
+        _excelFolder = excelFolder;
+        _isLoadExcel = isLoadExcel;
+        
 
     }
     #endregion
@@ -39,12 +42,15 @@ public class DbModule : Module
                PortDbServer = _portDbServer,
                DbDatabase = _dbDatabase,
                UidDbServer = _uidDbServer,
-               PasswordDbServer = _passwordDbServer
+               PasswordDbServer = _passwordDbServer,
+               ExcelFolder = _excelFolder,
+               IsLoadExcel = _isLoadExcel
             };
             builder.RegisterInstance(setupModel).AsSelf().SingleInstance();
-            builder.RegisterType<ExcelImporter>().AsImplementedInterfaces().SingleInstance();
             builder.RegisterType<DbServiceForGym>().AsImplementedInterfaces()
                 .SingleInstance().WithMetadata("Order", 2);
+            builder.RegisterType<ExcelImporter>().AsImplementedInterfaces()
+                .SingleInstance().WithMetadata("Order", 3);
         }
         catch
         {
@@ -69,5 +75,7 @@ public class DbModule : Module
     private readonly string _dbDatabase = string.Empty;
     private readonly string _uidDbServer = string.Empty;
     private readonly string _passwordDbServer = string.Empty;
+    private readonly string _excelFolder = string.Empty;
+    private readonly bool _isLoadExcel;
     #endregion
 }

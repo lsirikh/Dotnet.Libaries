@@ -1,4 +1,5 @@
-﻿using Dotnet.Gym.Message.Accounts;
+﻿using Caliburn.Micro;
+using Dotnet.Gym.Message.Accounts;
 using Dotnet.Gym.Message.Contacts;
 using Dotnet.Gym.Message.Enums;
 using Dotnet.Gym.Message.Providers;
@@ -36,6 +37,7 @@ public class TestDbServiceForGym
     public TestDbServiceForGym()
     {
         var logMock = new LogService();  // 아래에 구현한 콘솔 출력 스텁
+        var eventMock = new EventAggregator();
         _setupModel = new DbSetupModel
         {
             IpDbServer = TEST_DB_SERVER,
@@ -47,7 +49,7 @@ public class TestDbServiceForGym
         _users = new UserProvider();
         _emsMessages = new EmsMessageProvider();
         // DbServiceForGym 생성
-        _service = new DbServiceForGym(logMock, _setupModel, _users, _emsMessages);
+        _service = new DbServiceForGym(logMock, eventMock, _setupModel, _users, _emsMessages);
     }
 
     [Fact]

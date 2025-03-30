@@ -1,29 +1,11 @@
 # Ironwall Dotnet Based Libraries
 
-### Current Version : v1.0.0
-
 ### Goal
 > 다양한 SW를 개발하기 위한 Sensorway SW의 라이브러리 모음 Sensorway Framework이다.
 
 ### Site : Common
 ### Lisence : MIT
 <hr>
-
-### Update Date: 2025/03/16
-* Version : v1.0.0
-
-> 현재 등록된 라이브러리 목록
-
-* Ironwall.Dotnet.Libraries.Base
-* Ironwall.Dotnet.Libraries.ViewModel
-* Ironwall.Dotnet.Framework.Models
-* Ironwall.Dotnet.Libraries.Api
-* Ironwall.Dotnet.Libraries.Api.Aligo
-* Ironwall.Dotnet.Libraries.Db
-* Ironwall.Dotnet.Libraries.Utils
-
-<hr>
-
 
 ## 1. Ironwall.Dotnet.Libraries.Base 소개
 
@@ -310,3 +292,40 @@
 - **테스트 프레임워크**: `xUnit`
 
 ---
+
+### Update Date: 2025/03/16
+### Version : v1.0.0
+
+> 현재 등록된 라이브러리 목록
+
+* Ironwall.Dotnet.Libraries.Base
+* Ironwall.Dotnet.Libraries.ViewModel
+* Ironwall.Dotnet.Framework.Models
+* Ironwall.Dotnet.Libraries.Api
+* Ironwall.Dotnet.Libraries.Api.Aligo
+* Ironwall.Dotnet.Libraries.Db
+* Ironwall.Dotnet.Libraries.Utils
+
+<hr>
+
+### Update Date: 2025/03/30
+
+> 업데이트된 라이브러리 목록
+
+* Ironwall.Dotnet.Libraries.Base
+* Version : v1.1.0
+
+  1. SplashScreen 연동을 위한 Caliburn.micro 이벤트 메시지 추가
+
+* Ironwall.Dotnet.Libraries.Api.Aligo
+* Version : v1.0.0
+
+  1. 단위 테스트 코드 일부 수정
+
+* Ironwall.Dotnet.Libraries.Db
+* Version : v1.1.0
+
+  1. ExcelImporter 적용 가능 기능 구현 및 동작 확인
+  2. TestExcelImporter 단위테스터 구현 및 동작 확인
+
+<hr>

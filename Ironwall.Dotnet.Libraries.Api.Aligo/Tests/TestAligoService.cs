@@ -36,11 +36,11 @@ public class TestAligoService
         var apiSetupModel = new ApiSetupModel
         {
             Url = @"https://apis.aligo.in/",
-            ApiKey = "mad748ds806thcu9h9dd9cq1w0gyzuu8",
-            Username = "lsirikh",
-            Phone = "01041340786"
+            ApiKey = "API키",
+            Username = "고객아이디",
+            Phone = "고객번호"
         };
-        _sender = "01041340786";
+        _sender = "고객번호";
         _apiService = new ApiService(_logService, apiSetupModel);
         _messageProvider = new EmsMessageProvider();
         _aligoService = new AligoService(_logService, _apiService, _messageProvider);

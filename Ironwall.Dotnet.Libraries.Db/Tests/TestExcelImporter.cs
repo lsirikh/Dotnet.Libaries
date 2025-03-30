@@ -1,4 +1,5 @@
-﻿using DocumentFormat.OpenXml.Spreadsheet;
+﻿using Caliburn.Micro;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Dotnet.Gym.Message.Providers;
 using Ironwall.Dotnet.Libraries.Base.Services;
 using Ironwall.Dotnet.Libraries.Db.Models;
@@ -35,6 +36,7 @@ public class TestExcelImporter
     public TestExcelImporter()
     {
         var logMock = new LogService();  // 아래에 구현한 콘솔 출력 스텁
+        var eventMock = new EventAggregator();
         _setupModel = new DbSetupModel
         {
             IpDbServer = TEST_DB_SERVER,
@@ -43,12 +45,11 @@ public class TestExcelImporter
             UidDbServer = TEST_DB_USER,
             PasswordDbServer = TEST_DB_PASS
         };
-
         _users = new UserProvider();
         _emsMessages = new EmsMessageProvider();
         // DbServiceForGym 생성
-        _service = new DbServiceForGym(logMock, _setupModel, _users, _emsMessages);
-        _excelImporter = new ExcelImporter(logMock, _service);
+        _service = new DbServiceForGym(logMock, eventMock, _setupModel, _users, _emsMessages);
+        _excelImporter = new ExcelImporter(logMock, eventMock, _setupModel, _service);
     }
 
     [Fact]
@@ -67,15 +68,12 @@ public class TestExcelImporter
             return;
         }
 
-        // 첫 번째 파일 선택
-        var filePath = excelFiles[0];
-
-        //_log?.Info($"Loading Excel file: {filePath}");
-        //await _excelImporter.ImportExcelToDbAsync(filePath, token);
+        var memberExcelFile = excelFiles.FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Contains("회원", StringComparison.OrdinalIgnoreCase));
+        if (memberExcelFile == null) return;
 
         // 파일이 열려 있는 경우 대비하여 임시 폴더에 복사
         var tempFilePath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + ".xlsx");
-        File.Copy(filePath, tempFilePath, overwrite: true);
+        File.Copy(memberExcelFile, tempFilePath, overwrite: true);
 
         var ret = await _excelImporter.ImportExcelToDbAsync(tempFilePath);
 

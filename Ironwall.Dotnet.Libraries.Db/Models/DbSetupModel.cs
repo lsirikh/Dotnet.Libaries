@@ -29,6 +29,8 @@ public class DbSetupModel
     public string DbDatabase { get; set; } = string.Empty;
     public string UidDbServer { get; set; } = string.Empty;
     public string PasswordDbServer { get; set; } = string.Empty;
+    public string ExcelFolder { get; set; } = string.Empty;
+    public bool IsLoadExcel { get; set; }
     #endregion
     #region - Attributes -
     #endregion

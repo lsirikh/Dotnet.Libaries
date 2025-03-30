@@ -1,9 +1,11 @@
 ﻿using Autofac.Core;
+using Caliburn.Micro;
 using Dapper;
 using Dotnet.Gym.Message.Accounts;
 using Dotnet.Gym.Message.Contacts;
 using Dotnet.Gym.Message.Enums;
 using Dotnet.Gym.Message.Providers;
+using Ironwall.Dotnet.Libraries.Base.Models;
 using Ironwall.Dotnet.Libraries.Base.Services;
 using Ironwall.Dotnet.Libraries.Db.Models;
 using MySql.Data.MySqlClient;
@@ -12,6 +14,7 @@ using System.Data;
 using System.Data.Common;
 using System.Drawing;
 using System.IO;
+using System.Windows.Interop;
 
 namespace Ironwall.Dotnet.Libraries.Db.Services;
 /****************************************************************************
@@ -26,12 +29,14 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
 {
     #region - Ctors -
     public DbServiceForGym(ILogService log
+                            , IEventAggregator eventAggregator
                             , DbSetupModel setupModel
                             , UserProvider users
                             , EmsMessageProvider emsMessages)
     {
         _log = log;
-        _setupModel = setupModel;
+        _eventAggregator = eventAggregator;
+        _setup = setupModel;
         _userProvider = users;
         _emsProvider = emsMessages;
     }
@@ -88,35 +93,38 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
         try
         {
             var tempConnString =
-                $"Server={_setupModel.IpDbServer};" +
-                $"Port={_setupModel.PortDbServer};" +
-                $"User={_setupModel.UidDbServer};" +
-                $"Password={_setupModel.PasswordDbServer};" +
+                $"Server={_setup.IpDbServer};" +
+                $"Port={_setup.PortDbServer};" +
+                $"User={_setup.UidDbServer};" +
+                $"Password={_setup.PasswordDbServer};" +
                 $"SslMode=None;";
 
             using (var tempConn = new MySqlConnection(tempConnString))
             {
                 await tempConn.OpenAsync(token);
 
-                // DB가 있는지 확인: SHOW DATABASES LIKE '{_setupModel.DbDatabase}'
-                var checkSql = $"SHOW DATABASES LIKE '{_setupModel.DbDatabase}'";
+                // DB가 있는지 확인: SHOW DATABASES LIKE '{_setup.DbDatabase}'
+                var checkSql = $"SHOW DATABASES LIKE '{_setup.DbDatabase}'";
                 var result = await tempConn.ExecuteScalarAsync<string>(checkSql);
 
                 if (string.IsNullOrEmpty(result))
                 {
                     // DB가 없다면 CREATE
-                    var createSql = $"CREATE DATABASE `{_setupModel.DbDatabase}`;";
+                    var createSql = $"CREATE DATABASE `{_setup.DbDatabase}`;";
                     await tempConn.ExecuteAsync(createSql);
-                    _log.Info($"DB({_setupModel.DbDatabase})가 존재하지 않아 새로 생성했습니다.");
+                    _log?.Info($"DB({_setup.DbDatabase})가 존재하지 않아 새로 생성했습니다.");
                 }
+
+                if (_eventAggregator != null)
+                    await _eventAggregator.PublishOnUIThreadAsync(new SplashScreenMessage() { Title = "DbServiceForGym", Message = "DB테이블을 호출했습니다." });
             }
 
             var connectionString =
-                $"Server={_setupModel.IpDbServer};" +
-                $"Port={_setupModel.PortDbServer};" +
-                $"Database={_setupModel.DbDatabase};" +
-                $"User={_setupModel.UidDbServer};" +
-                $"Password={_setupModel.PasswordDbServer};" +
+                $"Server={_setup.IpDbServer};" +
+                $"Port={_setup.PortDbServer};" +
+                $"Database={_setup.DbDatabase};" +
+                $"User={_setup.UidDbServer};" +
+                $"Password={_setup.PasswordDbServer};" +
                 $"SslMode=None;";
 
             // MySqlConnection 인스턴스 생성
@@ -124,11 +132,14 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
 
             // DB 오픈
             await _conn.OpenAsync(token);
-            _log.Info($"DB 연결 성공: {_setupModel.IpDbServer}:{_setupModel.PortDbServer}/{_setupModel.DbDatabase}");
+            var msg = $"DB 연결 성공: {_setup.IpDbServer}:{_setup.PortDbServer}/{_setup.DbDatabase}";
+            _log?.Info(msg);
+            if (_eventAggregator != null)
+                await _eventAggregator.PublishOnUIThreadAsync(new SplashScreenMessage() { Title = "DbServiceForGym", Message = msg });
         }
         catch (Exception ex)
         {
-            _log.Error($"Raised {nameof(Exception)} : {ex}");
+            _log?.Error($"Raised {nameof(Exception)} : {ex}");
         }
     }
 
@@ -140,12 +151,12 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
             {
                 await _conn.CloseAsync();
                 _conn.Dispose();
-                _log.Info("MySQL/MariaDB 연결이 정상적으로 종료되었습니다.");
+                _log?.Info("MySQL/MariaDB 연결이 정상적으로 종료되었습니다.");
             }
         }
         catch (Exception ex)
         {
-            _log.Error($"Raised {nameof(Exception)} : {ex}");
+            _log?.Error($"Raised {nameof(Exception)} : {ex}");
         }
 
     }
@@ -183,6 +194,7 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
                       ON DELETE CASCADE
                       ON UPDATE CASCADE
                 );";
+
 
             // Locker 테이블 (UserTable.Id를 참조, 1:1 관계)
             var createLockerTable = @"
@@ -234,17 +246,29 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
                       ON UPDATE CASCADE
                 );";
 
-            await _conn.ExecuteAsync(createUserTable);
-            await _conn.ExecuteAsync(createActiveUserTable);
-            await _conn.ExecuteAsync(createLockerTable);
-            await _conn.ExecuteAsync(createEmsMessageTable);
-            await _conn.ExecuteAsync(createImageTable);
+            
 
-            _log.Info("테이블(UserTable, ActivePeriod) 생성/확인 완료.");
+            await _conn.ExecuteAsync(createUserTable);
+            if (_eventAggregator != null)
+                await _eventAggregator.PublishOnUIThreadAsync(new SplashScreenMessage() { Title = "DbServiceForGym", Message = "UserTable DB테이블을 생성합니다..." });
+            await _conn.ExecuteAsync(createActiveUserTable);
+            if (_eventAggregator != null)
+                await _eventAggregator.PublishOnUIThreadAsync(new SplashScreenMessage() { Title = "DbServiceForGym", Message = "ActivePeriod DB테이블을 생성합니다..." });
+            await _conn.ExecuteAsync(createLockerTable);
+            if (_eventAggregator != null)
+                await _eventAggregator.PublishOnUIThreadAsync(new SplashScreenMessage() { Title = "DbServiceForGym", Message = "LockerTable DB테이블을 생성합니다..." });
+            await _conn.ExecuteAsync(createEmsMessageTable);
+            if (_eventAggregator != null)
+                await _eventAggregator.PublishOnUIThreadAsync(new SplashScreenMessage() { Title = "DbServiceForGym", Message = "EmsMessage DB테이블을 생성합니다..." });
+            await _conn.ExecuteAsync(createImageTable);
+            if (_eventAggregator != null)
+                await _eventAggregator.PublishOnUIThreadAsync(new SplashScreenMessage() { Title = "DbServiceForGym", Message = "Image DB테이블을 생성합니다..." });
+
+            _log?.Info("테이블(UserTable, ActivePeriod) 생성/확인 완료.");
         }
         catch (Exception ex)
         {
-            _log.Error($"Raised {nameof(Exception)} : {ex}");
+            _log?.Error($"Raised {nameof(Exception)} : {ex}");
         }
     }
 
@@ -258,7 +282,7 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
             // 예시로 UserTable에 몇 명이 있는지 SELECT
             //var countSql = @"SELECT COUNT(*) FROM `UserTable`;";
             //var userCount = await _conn.ExecuteScalarAsync<int>(countSql);
-            //_log.Info($"UserTable 내 총 사용자 수: {userCount} 명");
+            //_log?.Info($"UserTable 내 총 사용자 수: {userCount} 명");
 
             var users = await FetchUsersAsync(token);
             _userProvider.Clear();
@@ -266,6 +290,8 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
             {
                 _userProvider.Add(item);
             }
+            if (_eventAggregator != null)
+                await _eventAggregator.PublishOnUIThreadAsync(new SplashScreenMessage() { Title = "DbServiceForGym", Message = "UserProvider의 정보를 모두 불러왔습니다..." });
 
             var ems = await FetchEmsMessagesAsync(token);
             _emsProvider.Clear();
@@ -273,13 +299,17 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
             {
                 _emsProvider.Add(item);
             }
+            if (_eventAggregator != null)
+                await _eventAggregator.PublishOnUIThreadAsync(new SplashScreenMessage() { Title = "DbServiceForGym", Message = "EmsProvider의 정보를 모두 불러왔습니다..." });
 
         }
         catch (Exception ex)
         {
-            _log.Error($"Raised {nameof(Exception)} : {ex}");
+            _log?.Error($"Raised {nameof(Exception)} : {ex}");
         }
     }
+
+    
 
 
     #region - SELECT (Fetch) -
@@ -326,8 +356,10 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
                     U.IsActive,
                     U.CreatedAt,
                     U.UpdatedAt,
+                    A.Id AS A_Id,        
                     A.StartDate,
                     A.EndDate,
+                    L.Id AS L_Id,      
                     L.Locker,
                     L.ShoeLocker
                 FROM `UserTable` U
@@ -360,11 +392,13 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
                     UpdatedAt = row.UpdatedAt ?? DateTime.MinValue,
                     ActivePeriod = row.StartDate.HasValue ? new ActivePeriod
                     {
+                        Id = row.A_Id.Value, // User Id와 동일
                         StartDate = row.StartDate.Value,
                         EndDate = row.EndDate.Value
                     } : null,
                     Locker = row.Locker != null ? new LockerModel
                     {
+                        Id = row.L_Id.Value, // User Id와 동일
                         Locker = row.Locker,
                         ShoeLocker = row.ShoeLocker
                     } : null
@@ -398,7 +432,7 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] FetchUsersAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] FetchUsersAsync Error: {ex}");
             return null;
         }
     }
@@ -471,7 +505,7 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
     //    }
     //    catch (Exception ex)
     //    {
-    //        _log.Error($"[DbServiceForGym] FetchUserByIdAsync Error: {ex}");
+    //        _log?.Error($"[DbServiceForGym] FetchUserByIdAsync Error: {ex}");
     //        return null;
     //    }
     //}
@@ -543,7 +577,7 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] FetchUserByIdAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] FetchUserByIdAsync Error: {ex}");
             return null;
         }
     }
@@ -633,7 +667,7 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] FetchEmsMessagesAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] FetchEmsMessagesAsync Error: {ex}");
             return null;
         }
     }
@@ -650,7 +684,7 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
         }
 
         // 파싱 실패 시
-        _log.Warning($"[ParseEnum] '{rawValue}' is not valid for {typeof(TEnum).Name}. Using default.");
+        _log?.Warning($"[ParseEnum] '{rawValue}' is not valid for {typeof(TEnum).Name}. Using default.");
         return default;
     }
     #endregion
@@ -710,12 +744,12 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
                 await InsertLockerAsync(user.Locker, token);
             }
 
-            _log.Info($"[DbServiceForGym] InsertUserAsync 완료 - NewId={newId}, Name={user.UserName}");
+            _log?.Info($"[DbServiceForGym] InsertUserAsync 완료 - NewId={newId}, Name={user.UserName}");
             return newId;
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] InsertUserAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] InsertUserAsync Error: {ex}");
             return 0;
         }
     }
@@ -738,11 +772,11 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
                     (@Id, @StartDate, @EndDate);
                 ";
             await _conn.ExecuteAsync(sql, model);
-            _log.Info($"[DbServiceForGym] InsertActiveUserAsync 완료 - Id={model.Id}");
+            _log?.Info($"[DbServiceForGym] InsertActiveUserAsync 완료 - Id={model.Id}");
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] InsertActiveUserAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] InsertActiveUserAsync Error: {ex}");
         }
     }
 
@@ -763,11 +797,11 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
                 (@Id, @Locker, @ShoeLocker);
         ";
             await _conn.ExecuteAsync(sql, locker);
-            _log.Info($"[DbServiceForGym] InsertLockerAsync 완료 - Id={locker.Id}");
+            _log?.Info($"[DbServiceForGym] InsertLockerAsync 완료 - Id={locker.Id}");
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] InsertLockerAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] InsertLockerAsync Error: {ex}");
         }
     }
 
@@ -826,12 +860,12 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
                 }
             }
 
-            _log.Info($"[DbServiceForGym] InsertEmsMessageAsync - NewId={newId}");
+            _log?.Info($"[DbServiceForGym] InsertEmsMessageAsync - NewId={newId}");
             return newId;
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] InsertEmsMessageAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] InsertEmsMessageAsync Error: {ex}");
             return 0;
         }
     }
@@ -868,7 +902,7 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
     //            user.Id
     //        });
 
-    //        _log.Info($"[DbServiceForGym] UpdateUserAsync - Id={user.Id}");
+    //        _log?.Info($"[DbServiceForGym] UpdateUserAsync - Id={user.Id}");
 
     //        // ActiveUser도 수정해야 한다면
     //        if (user.ActivePeriod != null)
@@ -879,7 +913,7 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
     //    }
     //    catch (Exception ex)
     //    {
-    //        _log.Error($"[DbServiceForGym] UpdateUserAsync Error: {ex}");
+    //        _log?.Error($"[DbServiceForGym] UpdateUserAsync Error: {ex}");
     //    }
     //}
 
@@ -927,11 +961,11 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
                 await UpdateLockerAsync(user.Locker, token);
             }
 
-            _log.Info($"[DbServiceForGym] UpdateUserAsync - Id={user.Id}");
+            _log?.Info($"[DbServiceForGym] UpdateUserAsync - Id={user.Id}");
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] UpdateUserAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] UpdateUserAsync Error: {ex}");
         }
     }
 
@@ -950,11 +984,11 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
                 WHERE Id=@Id; 
                 ";
             await _conn.ExecuteAsync(sql, model);
-            _log.Info($"[DbServiceForGym] UpdateActiveUserAsync - Id={model.Id}");
+            _log?.Info($"[DbServiceForGym] UpdateActiveUserAsync - Id={model.Id}");
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] UpdateActiveUserAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] UpdateActiveUserAsync Error: {ex}");
         }
     }
 
@@ -976,11 +1010,11 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
             WHERE Id=@Id;
         ";
             await _conn.ExecuteAsync(sql, locker);
-            _log.Info($"[DbServiceForGym] UpdateLockerAsync - Id={locker.Id}");
+            _log?.Info($"[DbServiceForGym] UpdateLockerAsync - Id={locker.Id}");
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] UpdateLockerAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] UpdateLockerAsync Error: {ex}");
         }
     }
     #endregion
@@ -999,14 +1033,14 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
             var sql = "DELETE FROM `UserTable` WHERE Id=@Id;";
             var ret = await _conn.ExecuteAsync(sql, new { Id = userId });
             if (ret > 0)
-                _log.Info($"[DbServiceForGym] DeleteUserAsync - Id={userId}");
+                _log?.Info($"[DbServiceForGym] DeleteUserAsync - Id={userId}");
             else
-                _log.Info($"[DbServiceForGym] DeleteUserAsync was not executed...");
+                _log?.Info($"[DbServiceForGym] DeleteUserAsync was not executed...");
 
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] DeleteUserAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] DeleteUserAsync Error: {ex}");
         }
     }
 
@@ -1023,11 +1057,11 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
 
             var sql = "DELETE FROM `ActivePeriod` WHERE Id=@Id;";
             await _conn.ExecuteAsync(sql, new { Id = userId });
-            _log.Info($"[DbServiceForGym] DeleteActiveUserAsync - Id={userId}");
+            _log?.Info($"[DbServiceForGym] DeleteActiveUserAsync - Id={userId}");
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] DeleteActiveUserAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] DeleteActiveUserAsync Error: {ex}");
         }
     }
 
@@ -1044,11 +1078,11 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
 
             var sql = "DELETE FROM `LockerTable` WHERE Id=@Id;";
             await _conn.ExecuteAsync(sql, new { Id = userId });
-            _log.Info($"[DbServiceForGym] DeleteLockerAsync - Id={userId}");
+            _log?.Info($"[DbServiceForGym] DeleteLockerAsync - Id={userId}");
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] DeleteLockerAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] DeleteLockerAsync Error: {ex}");
         }
     }
 
@@ -1065,11 +1099,11 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
 
             var sql = "DELETE FROM EmsMessage WHERE Id=@Id;";
             await _conn.ExecuteAsync(sql, new { Id = emsId });
-            _log.Info($"[DbServiceForGym] DeleteEmsMessageAsync - Id={emsId}");
+            _log?.Info($"[DbServiceForGym] DeleteEmsMessageAsync - Id={emsId}");
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] DeleteEmsMessageAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] DeleteEmsMessageAsync Error: {ex}");
         }
     }
 
@@ -1083,17 +1117,17 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
             if (_conn == null || _conn.State != ConnectionState.Open)
                 throw new Exception("DB not connected.");
 
-            _log.Info("[DbServiceForGym] 모든 사용자를 삭제하는 작업을 시작합니다.");
+            _log?.Info("[DbServiceForGym] 모든 사용자를 삭제하는 작업을 시작합니다.");
 
             // 1) UserTable의 모든 데이터 삭제 (ActivePeriod 및 EmsMessage는 ON DELETE CASCADE 적용)
             var sql = "DELETE FROM `UserTable`;";
             int affectedRows = await _conn.ExecuteAsync(sql);
 
-            _log.Info($"[DbServiceForGym] DeleteAllUsersAsync 완료 - 삭제된 사용자 수: {affectedRows}");
+            _log?.Info($"[DbServiceForGym] DeleteAllUsersAsync 완료 - 삭제된 사용자 수: {affectedRows}");
         }
         catch (Exception ex)
         {
-            _log.Error($"[DbServiceForGym] DeleteAllUsersAsync Error: {ex}");
+            _log?.Error($"[DbServiceForGym] DeleteAllUsersAsync Error: {ex}");
         }
     }
     #endregion
@@ -1114,7 +1148,7 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
         public DateTime? StartDate { get; set; }
         public DateTime? EndDate { get; set; }
 
-        public int? B_Id { get; set; }  // Locker.Id (== User.Id)
+        public int? L_Id { get; set; }  // Locker.Id (== User.Id)
         public string? Locker { get; set; }
         public string? ShoeLocker { get; set; }
     }
@@ -1155,8 +1189,9 @@ internal class DbServiceForGym : TaskService, IDbServiceForGym
             _conn != null && _conn.State == ConnectionState.Open;
     #endregion
     #region - Attributes -
-    private ILogService _log;
-    private DbSetupModel _setupModel;
+    private ILogService? _log;
+    private IEventAggregator? _eventAggregator;
+    private DbSetupModel _setup;
     private UserProvider _userProvider;
     private EmsMessageProvider _emsProvider;
     private MySqlConnection? _conn;
