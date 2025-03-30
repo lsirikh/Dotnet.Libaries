@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Platforms>AnyCPU;x86;x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
@@ -32,7 +33,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\source\repos\Dotnet.Gim.Manager\Dotnet.Gym.Message\Dotnet.Gym.Message.csproj" />
+    <ProjectReference Include="..\..\..\source\repos\Dotnet.Gym.Manager\Dotnet.Gym.Message\Dotnet.Gym.Message.csproj" />
     <ProjectReference Include="..\Ironwall.Dotnet.Libraries.Api\Ironwall.Dotnet.Libraries.Api.csproj" />
     <ProjectReference Include="..\Ironwall.Dotnet.Libraries.Base\Ironwall.Dotnet.Libraries.Base.csproj" />
   </ItemGroup>
